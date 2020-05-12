@@ -72,6 +72,18 @@ from playhouse.dataset import DataSet
 from playhouse.migrate import migrate
 
 
+class ReverseProxied(object):
+  def __init__(self, app):
+      self.app = app
+  def __call__(self, environ, start_response):
+      script_name = environ.get('HTTP_X_SCRIPT_NAME', '')
+      if script_name:
+          environ['SCRIPT_NAME'] = script_name
+          path_info = environ['PATH_INFO']
+          if path_info.startswith(script_name):
+              environ['PATH_INFO'] = path_info[len(script_name):]
+      return self.app(environ, start_response)
+
 CUR_DIR = os.path.realpath(os.path.dirname(__file__))
 DEBUG = False
 MAX_RESULT_SIZE = 1000
@@ -82,6 +94,7 @@ app = Flask(
     __name__,
     static_folder=os.path.join(CUR_DIR, 'static'),
     template_folder=os.path.join(CUR_DIR, 'templates'))
+app.wsgi_app = ReverseProxied(app.wsgi_app)
 app.config.from_object(__name__)
 dataset = None
 migrator = None
@@ -721,14 +734,14 @@ def get_option_parser():
     parser.add_option(
         '-p',
         '--port',
-        default=8080,
+        default=8888,
         help='Port for web interface, default=8080',
         type='int')
     parser.add_option(
         '-H',
         '--host',
-        default='127.0.0.1',
-        help='Host for web interface, default=127.0.0.1')
+        default='0.0.0.0',
+        help='Host for web interface, default=0.0.0.0')
     parser.add_option(
         '-d',
         '--debug',
@@ -837,7 +850,9 @@ def main():
                     break
 
     # Initialize the dataset instance and (optionally) authentication handler.
-    initialize_app(args[0], options.read_only, password, options.url_prefix)
+    read_only_force = True
+    # initialize_app(args[0], options.read_only, password, options.url_prefix)
+    initialize_app(args[0], True, password, options.url_prefix)
 
     if options.browser:
         open_browser_tab(options.host, options.port)
